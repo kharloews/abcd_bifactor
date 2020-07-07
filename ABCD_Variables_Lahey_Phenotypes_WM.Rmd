@@ -1,0 +1,812 @@
+---
+title: "ABCD Script Lahey Analyses"
+author: "Carlos Cardenas-Iniguez"
+date: "4/22/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packagesneeded}
+library(dplyr) 
+library(ggplot2) 
+library(lme4)
+library(cvTools)
+library(summarytools)
+library(readr)
+library(fastDummies)
+```
+```{r directories}
+# set directory
+data_dir <- "/Volumes/ToshibaExt/ABCD/ABCDstudyDEAP(1)_2.0" #This should be a path to the folder with all the ABCD Release 2.0 text files
+data_dir_1 <- "/Volumes/ToshibaExt/ABCD/ABCDFixRelease_2.0.1" #This should be a path to the folder with all of the ABCD Release 2.0.1 text files (for the accurate DTI and structural files)
+project_folder <- "/Volumes/ToshibaExt/ABCD/Lahey/"
+setwd(project_folder) #write in output folder if different than project folder, this needs to be run in the console, or it won't properly do it
+
+```
+
+The following section pulls all of the phenotype and demographic files. please see the codebook for additional details on the instruments below. 
+```{r phenotype_variables}
+acspsw03_n <-   sprintf('%s/acspsw03.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+acspsw03 <- sprintf('%s/acspsw03.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = acspsw03_n) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(src_subject_id, subjectkey, eventname, interview_date,
+         interview_age, gender, race_ethnicity, rel_family_id,
+         rel_group_id, rel_ingroup_order, rel_relationship, 
+         rel_same_sex, acs_raked_propensity_score)
+
+abcd_lt01_n <-   sprintf('%s/abcd_lt01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_lt01 <- sprintf('%s/abcd_lt01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_lt01_n) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(src_subject_id,site_id_l)
+
+abcd_mri01_n <-   sprintf('%s/abcd_mri01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_mri01 <- sprintf('%s/abcd_mri01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_mri01_n) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(src_subject_id,
+         mri_info_manufacturer,
+         mri_info_manufacturersmn,
+         mri_info_deviceserialnumber)
+
+pdem02_n <-   sprintf('%s/pdem02.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+pdem02 <- sprintf('%s/pdem02.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = pdem02_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(src_subject_id, demo_prim_p)
+
+dhx01_n <-   sprintf('%s/dhx01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+dhx01  <- sprintf('%s/dhx01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = dhx01_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(src_subject_id,
+         devhx_1_p,
+         devhx_2_birth_wt_lbs_p,
+         devhx_2b_birth_wt_oz_p,
+         devhx_3_age_at_birth_mother_p,
+         devhx_4_age_at_birth_father_p,
+         devhx_5_twin_p,
+         devhx_8_tobacco_p,
+         devhx_8_cigs_per_day_p,
+         devhx_8_alcohol_p,
+         devhx_8_alchohol_max_p,
+         devhx_8_alchohol_avg_p,
+         devhx_8_marijuana_p,
+         devhx_8_marijuana_amt_p,
+         devhx_8_coc_crack_p,
+         devhx_8_coc_crack_amt_p,
+         devhx_8_her_morph_p,
+         devhx_8_her_morph_amt_p,
+         devhx_8_oxycont_p,
+         devhx_8_oxycont_amt_p,
+         devhx_8_other_drugs_p,
+         devhx_9_tobacco_p,
+         devhx_9_cigs_per_day_p,
+         devhx_9_alcohol_p,
+         devhx_9_alcohol_max_p,
+         devhx_9_alcohol_max_dk_p,
+         devhx_9_alcohol_avg_p,
+         devhx_9_marijuana_p,
+         devhx_9_marijuana_amt_p,
+         devhx_9_coc_crack_p,
+         devhx_9_coc_crack_amt_p,
+         devhx_9_her_morph_p,
+         devhx_9_oxycont_p,
+         devhx_9_oxycont_amt_p,
+         devhx_9_other_drugs_p,
+         devhx_10_p,
+         devhx_caffeine_11_p,
+         devhx_caffeine_amt_p,
+         devhx_caff_amt_week_p,
+         devhx_12a_born_premature_p,
+         devhx_12_weeks_premature_p
+  )
+
+pasr01_n <-   sprintf('%s/pasr01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+pasr01  <- sprintf('%s/pasr01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = pasr01_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>% 
+  select(c(5,11:146))
+
+abcd_bpm01_n <-   sprintf('%s/abcd_bpm01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_bpm01  <- sprintf('%s/abcd_bpm01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_bpm01_n, na = c('','NA')) %>% 
+  filter(eventname=="baseline_year_1_arm_1") 
+
+abcd_bpmt01_n <-   sprintf('%s/abcd_bpmt01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_bpmt01  <- sprintf('%s/abcd_bpmt01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_bpmt01_n, na = c('','NA')) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5,10:27))
+
+abcd_cbcl01_n <-   sprintf('%s/abcd_cbcl01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_cbcl01 <- sprintf('%s/abcd_cbcl01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_cbcl01_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5,10:128))
+#####also available at 1 yr followup for a subset of participants
+##### only baseline included here
+
+abcd_ptsd01_n <-   sprintf('%s/abcd_ptsd01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_ptsd01 <- sprintf('%s/abcd_ptsd01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_ptsd01_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5,10:26))
+####only available for 11860 participants
+
+abcd_ksad01_n <-   sprintf('%s/abcd_ksad01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_ksad01<- sprintf('%s/abcd_ksad01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_ksad01_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select( c(5, 11:18,19:57,58:67,68:110,111:115,116:142,143:158,159:187,
+            188:202,203:215,216:264,265:290,309:346,347:399,400:424,425:458,
+            835:893,465:471,894:948)) 
+
+##### only available for 11860 participants at baseline
+#####also available at 1 yr followup for a subset of participants
+##### only baseline included here
+
+abcd_ksad501_n <-   sprintf('%s/abcd_ksad501.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_ksad501<- sprintf('%s/abcd_ksad501.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_ksad501_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(sort(names(.)))  %>% 
+  select(c(963,9:55,56:73,74:99,118:155,156:208,209:233,234:267,
+           274:280,317:369,697:751,752:755,756:804,805:810,823:827,
+           828:870,871:886,887:899,900:927,928:946,947:959)) %>%
+  select(-c(ksads_8_313b_t))
+colnames(abcd_ksad501)[colnames(abcd_ksad501)=="ksads_8_313a_t"] <- "ksads_8_313_t"
+
+#####Only available for 11866 participants at baseline
+#####also available at 1 yr followup for a subset of participants
+##### only baseline included here
+
+abcd_y7mi01_n <-   sprintf('%s/abcd_y7mi01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_y7mi01 <- sprintf('%s/abcd_y7mi01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_y7mi01_n, na = c('','NA')) %>% 
+  filter(eventname=="baseline_year_1_arm_1")
+######only at 1 year followup
+
+abcd_yddss01_n <-   sprintf('%s/abcd_yddss01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_yddss01 <- sprintf('%s/abcd_yddss01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_yddss01_n, na = c('','NA')) %>% 
+  filter(eventname=="baseline_year_1_arm_1")
+######only at 1 year followup
+
+cct01_n <-   sprintf('%s/cct01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+cct01  <- sprintf('%s/cct01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = cct01_n, na = c('','NA')) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(src_subject_id, neurocog_cash_choice_task)
+
+psb01_n <-   sprintf('%s/psb01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+psb01<- sprintf('%s/psb01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = psb01_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5,11:13))
+#####also available at 1 yr followup for a subset of participants
+##### only baseline included here
+
+abcd_psb01_n <-   sprintf('%s/abcd_psb01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_psb01<- sprintf('%s/abcd_psb01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_psb01_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(5,10:12)
+#####also available at 1 yr followup for a subset of participants
+##### only baseline included here
+
+abcd_upps01_n <-   sprintf('%s/abcd_upps01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_upps01<- sprintf('%s/abcd_upps01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_upps01_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5,10:29))
+
+abcd_lsstbi01_n <-   sprintf('%s/abcd_lsstbi01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_lsstbi01  <- sprintf('%s/abcd_lsstbi01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_lsstbi01_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="1_year_follow_up_y_arm_1")
+#####abcd_lsstbi01 only available at one-year followup 
+#####for a portion of participants (4951) as of release 2.0
+
+dibf01_n <-   sprintf('%s/dibf01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+dibf01<- sprintf('%s/dibf01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = dibf01_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5,39:46,49:56,60:64,70,71,73:81))
+
+abcd_tbss01_n <-   sprintf('%s/abcd_tbss01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_tbss01 <- sprintf('%s/abcd_tbss01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_tbss01_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>% 
+  select(src_subject_id,
+         nihtbx_picvocab_uncorrected,
+         nihtbx_flanker_uncorrected,
+         nihtbx_list_uncorrected,
+         nihtbx_cardsort_uncorrected,
+         nihtbx_pattern_uncorrected,
+         nihtbx_picture_uncorrected,
+         nihtbx_reading_uncorrected)
+
+abcd_ps01_n <-   sprintf('%s/abcd_ps01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_ps01  <- sprintf('%s/abcd_ps01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_ps01_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(src_subject_id, 
+         pea_ravlt_sd_trial_i_tc,
+         pea_ravlt_sd_trial_ii_tc,
+         pea_ravlt_sd_trial_iii_tc,
+         pea_ravlt_sd_trial_iv_tc,
+         pea_ravlt_sd_trial_v_tc,
+         pea_ravlt_sd_listb_tc,
+         pea_ravlt_sd_trial_vi_tc,
+         pea_ravlt_ld_trial_vii_tc,
+         pea_wiscv_trs)
+
+lmtp201_n <-   sprintf('%s/lmtp201.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+lmtp201  <- sprintf('%s/lmtp201.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = lmtp201_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(src_subject_id,
+         lmt_scr_perc_correct)
+
+medsy01_n <-   sprintf('%s/medsy01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+medsy01  <- sprintf('%s/medsy01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = medsy01_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="1_year_follow_up_y_arm_1") 
+
+
+abcd_mx01_n <-   sprintf('%s/abcd_mx01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_mx01 <- sprintf('%s/abcd_mx01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_mx01_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(src_subject_id,
+         medhx_1a_dr_past_yr_p,
+         medhx_2c_brain_injury_p,
+         medhx_4a_er_past_yr_p,
+         medhx_6a_broken_bones_p,
+         medhx_6b_sprains_p,
+         medhx_6c_cuts_p,
+         medhx_6d_stitches_p,
+         medhx_6e_other_wounds_p,
+         medhx_6f_falls_p,
+         medhx_6g_burns_p,
+         medhx_6i_head_injury_p,
+         medhx_6j_unconsious_p,
+         medhx_6m_broken_teeth_p,
+         medhx_6q_poison_p,
+         medhx_6r_gun_shot_p,
+         medhx_6s_knife_wound_p)
+
+acspsw03_ben <- acspsw03
+acspsw03_ben$race_ethnicity <- factor(acspsw03$race_ethnicity, levels = 1:5,
+                                  labels = c("white", "black","hispanic","asian", "other"))
+acspsw03_ben <- acspsw03_ben %>% dummy_cols(ignore_na = TRUE, select_columns = c("race_ethnicity", "gender"))%>%
+  select(src_subject_id, 
+         interview_age,
+         gender_M,
+         gender_F,
+         race_ethnicity_white,
+         race_ethnicity_black,
+         race_ethnicity_hispanic,
+         race_ethnicity_asian,
+         race_ethnicity_other,
+         race_ethnicity,
+         gender,
+         acs_raked_propensity_score)
+
+acspsw03_ben_fam <- acspsw03
+acspsw03_ben_fam <- acspsw03_ben_fam %>%
+  select(src_subject_id,
+         rel_family_id)
+
+abcd_ps01_ben <- abcd_ps01
+abcd_ps01_ben$pea_ravlt_sd_trialmean <- rowMeans(abcd_ps01_ben[,c(2:6)])
+
+pdem02_fam_n <-   sprintf('%s/pdem02.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+pdem02_fam <- sprintf('%s/pdem02.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = pdem02_fam_n, 
+           na = c('','NA'), guess_max = 11875) %>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(src_subject_id,
+         demo_prnt_ed_v2b,
+         demo_prnt_gender_id_p,
+         demo_prtnr_ed_v2b,
+         demo_prnt_prtnr_bio_2,
+         demo_prnt_prtnr_adopt_p,
+         demo_comb_income_v2b,
+         demo_roster_p)
+```
+####################################################################################
+######################################################################################
+####################################################################################
+The following are extra variables that were used for sensitivity analyses for the Phenotypes paper. Should still be run
+
+```{r additionalvars}
+abcd_pksadscd01_n <-   sprintf('%s/abcd_pksadscd01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_pksadscd01 <- sprintf('%s/abcd_pksadscd01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_pksadscd01_n, 
+           na = c('','NA'), guess_max = 16800) %>% 
+  filter(eventname=="baseline_year_1_arm_1")
+
+abcd_y7mi01_n <-   sprintf('%s/abcd_y7mi01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_y7mi01 <- sprintf('%s/abcd_y7mi01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_y7mi01_n, 
+           na = c('','NA'), guess_max = 16800)
+
+pps01_n <-   sprintf('%s/pps01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+pps_01 <- sprintf('%s/pps01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = pps01_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5,10:72))
+
+abcd_ehis01_n <-   sprintf('%s/abcd_ehis01.txt',data_dir) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+abcd_ehis01  <- sprintf('%s/abcd_ehis01.txt',data_dir) %>% 
+  read_tsv(skip = 2, col_names = abcd_ehis01_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(src_subject_id,
+         ehi_ss_score)
+```
+#######################################################################################
+# BPPCA Scores from Thompson et al. 2019 
+# Run for Ben's stuff
+# Needs csv file with BPPCA scores extracted
+
+```{r BPPCA_CogScores}
+BPPCA_CogScores <-   "/Volumes/ToshibaExt/ABCD_release2.0.1_update_Rds/BPPCA_CogScores.csv" %>%
+  read_csv(guess_max = 16800) %>%
+  select(src_subject_id, 
+         neurocog_pc1,
+         neurocog_pc2,
+         neurocog_pc3)
+```
+```{r fsqc_cores}
+ freesqc01_n <- sprintf('%s/freesqc01.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+ freesqc01 <- sprintf('%s/freesqc01.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = freesqc01_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(src_subject_id,
+         fsqc_qc)
+```
+
+#######################################################################################
+#Estimated factor scores from SEM analyses
+#Bifactor Model Scores
+Do not need to include these for Ben
+For this to run, you will need to have the Bifactor scores csv
+
+```{r BifactorScores}
+CBCL_BifactorScores <-   sprintf('%s/CBCL_BifactorEstimatedFactorScores.csv',project_folder) %>%
+  read_csv(guess_max = 16800) %>%
+  select(src_subject_id, 
+         Gen3B,
+         Ext3B,
+         Int3B,
+         ADHD3B)
+```
+
+This section will collect all of the DTI measures (FA, MD, TD, LD )
+```{r WhiteMatter}
+# DTI Measures #
+wm_fa_n <- sprintf('%s/abcd_dmdtifp101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+wm_fa <- sprintf('%s/abcd_dmdtifp101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = wm_fa_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5,10:51))
+
+wm_md_n <- sprintf('%s/abcd_dmdtifp101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+wm_md <- sprintf('%s/abcd_dmdtifp101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = wm_md_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5,52:93))
+
+wm_ld_n <- sprintf('%s/abcd_dmdtifp101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+wm_ld <- sprintf('%s/abcd_dmdtifp101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = wm_ld_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5,94:135))
+
+wm_td_n <- sprintf('%s/abcd_dmdtifp101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+wm_td <- sprintf('%s/abcd_dmdtifp101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = wm_td_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 136:177))
+```
+
+
+#########################################################################################
+#########################################################################################
+### Cortical Structure Measures--Desikan-Killiany Parcellation
+```{r StructuralDesikanKilliany}
+#Cortical Thickness
+ct_dk_n <- sprintf('%s/abcd_smrip101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+ct_dk <- sprintf('%s/abcd_smrip101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = ct_dk_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 11:78,115:117))
+
+#Sulcal Depth
+sd_dk_n <- sprintf('%s/abcd_smrip101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+sd_dk <- sprintf('%s/abcd_smrip101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = sd_dk_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 118:185,222:224))
+
+#Cortical Area
+ca_dk_n <- sprintf('%s/abcd_smrip101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+ca_dk <- sprintf('%s/abcd_smrip101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = ca_dk_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 225:292,329:331))
+
+#Cortical Volume
+cv_dk_n <- sprintf('%s/abcd_smrip101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+cv_dk <- sprintf('%s/abcd_smrip101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = cv_dk_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 332:399,436:438))
+
+#T1 Intensity white matter 
+t1wm_dk_n <- sprintf('%s/abcd_smrip101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+t1wm_dk <- sprintf('%s/abcd_smrip101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = t1wm_dk_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 439:506,543:545))
+
+#T1 Intensity Gray matter 
+t1gm_dk_n <- sprintf('%s/abcd_smrip101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+t1gm_dk <- sprintf('%s/abcd_smrip101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = t1gm_dk_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 546:613,650:652))
+
+#T1 gray-white intensity contrast
+t1cont_dk_n <- sprintf('%s/abcd_smrip101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+t1cont_dk <- sprintf('%s/abcd_smrip101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = t1cont_dk_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 653:720,757:759))
+
+#Subcort Volume 
+subcort_dk_n <- sprintf('%s/abcd_smrip201.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+subcort_dk <- sprintf('%s/abcd_smrip201.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = subcort_dk_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 330:375))
+
+subcort_icv <- subcort_dk[,c(1,45)]
+```
+
+#########################################################################################
+#########################################################################################
+### Cortical Structure Measures--Destrieux Parcellation
+```{r StructuralDestrieux}
+#Cortical Thickness
+ct_ds_n <- sprintf('%s/abcd_mrisdp101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+ct_ds <- sprintf('%s/abcd_mrisdp101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = ct_ds_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 10:160))
+
+#Sulcal Depth
+sd_ds_n <- sprintf('%s/abcd_mrisdp101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+sd_ds <- sprintf('%s/abcd_mrisdp101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = sd_ds_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 161:311))
+
+#Cortical Area
+ca_ds_n <- sprintf('%s/abcd_mrisdp101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+ca_ds <- sprintf('%s/abcd_mrisdp101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = ca_ds_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 312:462))
+
+#Cortical Volume
+cv_ds_n <- sprintf('%s/abcd_mrisdp101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+cv_ds <- sprintf('%s/abcd_mrisdp101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = cv_ds_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 463:613))
+
+#T1 Intensity white matter 
+t1wm_ds_n <- sprintf('%s/abcd_mrisdp101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+t1wm_ds <- sprintf('%s/abcd_mrisdp101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = t1wm_ds_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 614:764))
+
+#T1 Intensity Gray matter 
+t1gm_ds_n <- sprintf('%s/abcd_mrisdp101.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+t1gm_ds <- sprintf('%s/abcd_mrisdp101.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = t1gm_ds_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 765:915))
+
+#T1 gray-white intensity contrast
+t1cont_ds_n <- sprintf('%s/abcd_mrisdp201.txt',data_dir_1) %>%
+  read_tsv(n_max = 0) %>% # default: col_names = TRUE
+  names()
+t1cont_ds <- sprintf('%s/abcd_mrisdp201.txt',data_dir_1) %>% 
+  read_tsv(skip = 2, col_names = t1cont_ds_n, 
+           na = c('','NA'), guess_max = 16800)%>% 
+  filter(eventname=="baseline_year_1_arm_1") %>%
+  select(c(5, 10:160))
+```
+Run this for a dataset for the WM and phenotypes papers. It will output a .sav file for SPSS
+and a .csv file. 
+```{r SaveWMdataset}
+
+###############################
+#Here we combine all measures, and merge them all together. 
+
+#all_measures  = list(acspsw03, abcd_lt01, abcd_mri01, pdem02, dhx01, pasr01, abcd_bpmt01, abcd_cbcl01,
+#                     abcd_ptsd01, abcd_ksad01, abcd_ksad501, cct01, psb01, abcd_psb01,
+#                     abcd_upps01, abcd_mx01, dibf01, abcd_tbss01, abcd_ps01, lmtp201, pps_01,abcd_ehis01,
+#                     wm_fa, wm_ld, wm_md, wm_td, subcort_icv, BPPCA_CogScores, CBCL_BifactorScores)
+
+all_measures  = list(acspsw03, abcd_lt01, abcd_mri01, pdem02, psb01, abcd_psb01,
+                     abcd_tbss01,
+                     wm_md, subcort_icv, BPPCA_CogScores, CBCL_BifactorScores, acspsw03_ben, freesqc01)
+
+combined_measures <- Reduce(function(dtf1, dtf2) merge(dtf1, dtf2, all.x = TRUE),
+       all_measures)
+
+combined_measures_sorted <- combined_measures[order(combined_measures$src_subject_id),]
+combined_measures_sorted <- combined_measures_sorted %>% 
+  mutate(subnum_new = 1:n() + 10000) %>%
+  mutate(subnum_char = sapply(subnum_new, toString)) %>%
+  mutate(FLIP = subnum_new %% 10) %>%
+  select(FLIP, subnum_char, subnum_new, everything())
+
+#can save to desired format
+write.csv(combined_measures_sorted, "ABCD_behcombined_wm_test2.csv", row.names = FALSE) 
+#this will save csv with all behav measures and also all white matter variables
+
+#The code below will save an SPSS-compatible .sav file
+library(haven)
+sav1<- write_sav(combined_measures_sorted, "ABCD_behcombined_wm_test2.sav", compress = FALSE)
+```
+
+You only need to run this section if you are extracting the cortical structure measures using the Desikan-Killiany parcellation
+
+```{r SaveStructDKDataset}
+struct_meas_dk <- list(acspsw03, ct_dk, sd_dk, ca_dk, cv_dk, t1gm_dk, t1wm_dk, t1cont_dk, subcort_dk)
+combined_measures_struct_dk <- Reduce(function(dtf1, dtf2) left_join(dtf1, dtf2, by = "src_subject_id"),struct_meas_dk)
+
+write.csv(combined_measures_struct_dk, "ABCD_struct_dk.csv", row.names = FALSE) 
+#this will save csv with all structural measures using the Desikan-Killiany parcellation (and subcortical volumes)
+```
+You only need to run this section if you are extracting the cortical structure measures using the Destrieux parcellation
+```{r SaveStructDSDataset}
+struct_meas_ds <- list(acspsw03, ct_ds, sd_ds, ca_ds, cv_ds, t1gm_ds, t1wm_ds, t1cont_ds)
+combined_measures_struct_ds <- Reduce(function(dtf1, dtf2) left_join(dtf1, dtf2, by = "src_subject_id"), struct_meas_ds)
+
+write.csv(combined_measures_struct_ds, "ABCD_struct_ds.csv", row.names = FALSE) 
+#this will save csv with all structural measures using the Destrieux parcellation 
+```
+You only need to run this section if you are extracting the white matter and additional bifactor model scores and demographics
+```{r SaveWMforCanCorr}
+measures_ben_wm <- list(acspsw03_ben, abcd_lt01, lmtp201, abcd_ps01_ben, abcd_tbss01, CBCL_BifactorScores,wm_fa, wm_ld, wm_md, wm_td,abcd_mri01,acspsw03_ben_fam, pdem02_fam)
+
+combined_measures_ben_wm <-Reduce(function(dtf1, dtf2) left_join(dtf1, dtf2, by = "src_subject_id"),
+                                  measures_ben_wm )
+
+write.csv(combined_measures_ben_wm, "ABCD_wm_bifac_ef_measures.csv", row.names = FALSE)
+#this will save csv with all the wm measures, all EF scores, all bifactor scores, and control demographics
+```
+
+```{r pca}
+library(FactoMineR)
+library(data.table)
+ef_factors <- data.table(combined_measures$nihtbx_flanker_uncorrected, combined_measures$nihtbx_cardsort_uncorrected, combined_measures$nihtbx_pattern_uncorrected)
+res.pca = PCA(ef_factors, scale.unit=TRUE, ncp=5)
+pca1 <- res.pca$ind$coord[,1]
+```
+
+
+```{r vars_regressions}
+mri_coil_dummy <- dummy_cols(combined_measures$mri_info_manufacturersmn)
+colnames(mri_coil_dummy) <- c("mri_coil_dummy_orig", "coil_Achieva_dStream","coil_Discovery_MR750",
+"coil_Ingenia","coil_Prisma","coil_Prisma_fit","coil_NA")
+
+race_eth_dummy <- dummy_cols(combined_measures$race_ethnicity)
+colnames(race_eth_dummy) <- c("race_eth_orig", "race_eth_white","race_eth_black",
+"race_eth_hispanic","race_eth_asian","race_eth_other","other_NA")
+
+gender_dummy <- dummy_cols(combined_measures$gender)
+colnames(gender_dummy) <- c("gender_orig","gender_Female","gender_Male","gender_NA")
+
+vars_for_regressions <- data.frame(combined_measures_sorted, mri_coil_dummy,race_eth_dummy, gender_dummy)
+vars_for_reg <- vars_for_regressions[which(vars_for_regressions$fsqc_qc ==1),c(5,35:84,92,94:106,108:110)]
+vars_for_reg_pass <- vars_for_regressions[which(vars_for_regressions$fsqc_qc ==1),]
+vars_for_reg_pass_sample <- vars_for_regressions[,c(5,35:84,92,94:106,108:110)]
+
+vars_for_reg_comp <- vars_for_reg_pass_sample[complete.cases(vars_for_reg_pass_sample),]
+vars_reg_zscore <- data.frame(lapply(vars_for_reg_comp, function(x) scale(x)))
+
+vars_for_corrplot <- vars_for_regressions[which(vars_for_regressions$fsqc_qc ==1),c(5,35:69,79,81:84)]
+vars_for_corrplot_complete <- vars_for_corrplot[complete.cases(vars_for_corrplot),]
+subsetef <- vars_for_corrplot_complete[,c(37:41)]
+```
+```{r corrplot}
+library(corrplot)
+vars_matrix <- data.matrix(vars_for_corrplot_complete)
+M <- cor(vars_matrix)
+corrplot(M, method = "color")
+
+vars_matrix <- data.matrix(subsetef)
+M1 <- cor(vars_matrix)
+corrplot.mixed(M1, upper = "color", lower.col = "black")
+
+```
+
+
+```{r LV1Mediation_GenAbility}
+fitM <- lm(neurocog_pc2~ dmdtifp1_43 + interview_age + gender_Male + race_eth_white + race_eth_black +race_eth_hispanic 
+           +coil_Achieva_dStream + coil_Discovery_MR750 + coil_Ingenia + coil_Prisma,     data=vars_reg_zscore) 
+fitY <- lm(ADHD3B~ neurocog_pc2 + dmdtifp1_43 + interview_age + gender_Male + race_eth_white + race_eth_black +race_eth_hispanic  
+           +coil_Achieva_dStream + coil_Discovery_MR750 + coil_Ingenia + coil_Prisma, data=vars_reg_zscore)
+fitMedBoot <- mediation:::mediate(fitM, fitY, boot=TRUE, sims=2000, treat="dmdtifp1_43", mediator="neurocog_pc2")
+summary(fitMedBoot)
+plot(fitMedBoot, main= "Mediation Effects for EF on ADHD")
+```
+
+```{r MediationDiagram_LV1_GenAbility}
+library(psych)
+fita_1 <- lm(neurocog_pc2~ dmdtifp1_43 + interview_age + gender_Male + race_eth_white + race_eth_black +race_eth_hispanic 
+           +coil_Achieva_dStream + coil_Discovery_MR750 + coil_Ingenia + coil_Prisma, data=vars_for_reg_comp) 
+fitcp_1 <- lm(ADHD3B~ neurocog_pc2 + dmdtifp1_43 + interview_age + gender_Male + race_eth_white + race_eth_black +race_eth_hispanic  
+           +coil_Achieva_dStream + coil_Discovery_MR750 + coil_Ingenia + coil_Prisma, data=vars_reg_zscore)
+fitb_1 <- lm(ADHD3B~ neurocog_pc2 + interview_age + gender_Male + race_eth_white + race_eth_black +race_eth_hispanic  
+           +coil_Achieva_dStream + coil_Discovery_MR750 + coil_Ingenia + coil_Prisma, data=vars_reg_zscore)
+fitc_1 <-lm(ADHD3B~dmdtifp1_43 + interview_age +gender_Male + race_eth_white + race_eth_black +race_eth_hispanic  
+           +coil_Achieva_dStream + coil_Discovery_MR750 + coil_Ingenia + coil_Prisma, data=vars_reg_zscore)
+mod1Cog <- psych:::mediate(ADHD3B ~ dmdtifp1_43 - interview_age - gender_Male -race_eth_white - race_eth_black - race_eth_hispanic 
+           - coil_Achieva_dStream - coil_Discovery_MR750 - coil_Ingenia - coil_Prisma + (neurocog_pc2), data=vars_reg_zscore, n.iter = 10000, std = TRUE) #, std = TRUE
+psych:::mediate.diagram(mod1Cog, xlim = c(-1,11), ylim= c(3,9))
+```
+
+```{r mediatetable_LV1_GenAbility, results='asis'}
+library(stargazer)
+stargazer(fita_1, fitb_1, fitc_1, fitcp_1, header=FALSE, type = 'latex')
+```
